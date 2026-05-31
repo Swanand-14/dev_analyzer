@@ -3,9 +3,10 @@ from typing import Any
 import jwt
 from fastapi import HTTPException, status
 from app.core.config import get_settings
+from pydantic import Optional
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     settings = get_settings()
     payload = data.copy()
     expire = datetime.utcnow() + (

@@ -1,11 +1,12 @@
 import certifi
+from typing import Optional
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.database import Database
 from app.core.config import get_settings
- 
-_client: MongoClient | None = None
- 
- 
+
+_client: Optional[MongoClient] = None
+
+
 def connect_db() -> Database:
     global _client
     settings = get_settings()
@@ -18,13 +19,14 @@ def connect_db() -> Database:
     db = _client[settings.MONGODB_DB_NAME]
     _create_indexes(db)
     return db
- 
- 
+
+
 def disconnect_db() -> None:
     global _client
     if _client:
         _client.close()
         _client = None
+
 
 def _create_indexes(db: Database) -> None:
     db.users.create_index([("email", ASCENDING)], unique=True)
