@@ -1,8 +1,3 @@
-# app/services/github/rate_limiter.py
-#
-# Adaptive rate limiter for Gemini API calls during repo analysis.
-# Adjusts request limits dynamically based on repo size to avoid
-# hitting Gemini's per-minute quota.
 
 import time
 from typing import List
@@ -24,9 +19,7 @@ class AdaptiveRateLimiter:
         self._current_limit: int = 3       # max requests per minute (default conservative)
         self._min_delay: float = 5.0       # minimum seconds between any two requests
 
-    # ──────────────────────────────────────────────────────────────
-    # PUBLIC API
-    # ──────────────────────────────────────────────────────────────
+  
 
     def set_limit_based_on_files(self, file_count: int) -> None:
         """

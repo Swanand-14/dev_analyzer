@@ -64,13 +64,13 @@ class RepoAnalysisPipeline:
         print(f"{'='*70}")
  
         # Step 1 — chunk repo
-        print("\n📊 Step 1: Chunking files...")
+        print("\n Step 1: Chunking files...")
         analyzer     = ChunkingAnalyzer(repo_url, self.github_client)
         chunk_result = analyzer.chunk_repo()
         file_tree    = analyzer.get_file_tree()
  
         # Step 2 — extract facts
-        print("\n🧪 Step 2: Testing & CI/CD facts...")
+        print("\n Step 2: Testing & CI/CD facts...")
         testing_facts = lean_testing_facts(QualityMetricsAnalyzer.analyze_testing(analyzer.repo, file_tree))
         cicd_facts    = lean_cicd_facts(QualityMetricsAnalyzer.analyze_cicd(analyzer.repo, file_tree))
         doc_facts     = lean_doc_facts(QualityMetricsAnalyzer.analyze_documentation(analyzer.repo, file_tree))
@@ -80,7 +80,7 @@ class RepoAnalysisPipeline:
         security_facts = lean_security_facts(raw_security_facts)
 
  
-        print("\n📈 Step 4: Activity facts...")
+        print("\n Step 4: Activity facts...")
         activity_facts = lean_activity_facts(GitHubActivityAnalyzer.analyze_commit_patterns(analyzer.repo))
  
         # Step 3 — set rate limit based on repo size
@@ -88,11 +88,11 @@ class RepoAnalysisPipeline:
         self.rate_limiter.set_limit_based_on_files(total_files)
  
         # Step 4 — AI signal extraction
-        print("\n🤖 Step 5: AI signal extraction...")
+        print("\n Step 5: AI signal extraction...")
         features_analyzed = self._analyze_all_chunks(chunk_result["chunks"])
  
         # Step 5 — aggregate + deduplicate
-        print("\n📝 Step 6: Aggregating + cleaning signals...")
+        print("\n Step 6: Aggregating + cleaning signals...")
         signals_by_capability, signal_counts = self._aggregate_signals(
             features_analyzed, raw_security_facts
         )
@@ -103,7 +103,7 @@ class RepoAnalysisPipeline:
             for c in f.get("chunks", [])
         )
         # Step 6 — LLM project context
-        print("\n🧠 Step 7: Building project context...")
+        print("\n Step 7: Building project context...")
         readme_content = self._fetch_readme(analyzer.repo, doc_facts)
         project_context = self._build_project_context_llm(
             readme_content, technologies, signals_by_capability,
@@ -116,7 +116,7 @@ class RepoAnalysisPipeline:
         print(
             f"\n✅ STAGE-1 COMPLETE ({elapsed}s) | "
             f"Signals: {signal_counts['total']} "
-            f"(wiring: {signal_counts['wiring']}, negative: {signal_counts['negative']})"
+            f"(wiring: {signal_counts['wiring']}, negative: {signal_counts['negative']}, behavioral: {signal_counts['behavioral']}, structural: {signal_counts['structural']}) | "
         )
  
         return {
@@ -132,6 +132,8 @@ class RepoAnalysisPipeline:
             "total_signals":         signal_counts["total"],
             "total_wiring_signals":  signal_counts["wiring"],
             "total_negative_signals":signal_counts["negative"],
+            "total_behavioral_signals": signal_counts["behavioral"],
+            "total_structural_signals": signal_counts["structural"],
             "testing_facts":         testing_facts,
             "cicd_facts":            cicd_facts,
             "documentation_facts":   doc_facts,
@@ -323,15 +325,17 @@ class RepoAnalysisPipeline:
         cleaned = SignalPostprocessor.clean(dict(raw))
         sbc     = cleaned["signals_by_capability"]
  
-        total = wiring = negative = 0
+        total = wiring = negative = behavioural = structural =  0
         for signals in sbc.values():
             for sig in signals:
                 total += 1
                 t = sig.get("type", "")
                 if t == "wiring":   wiring   += 1
                 elif t == "negative": negative += 1
+                elif t == "behavioral": behavioural += 1
+                elif t == "structural": structural += 1
  
-        return sbc, {"total": total, "wiring": wiring, "negative": negative}
+        return sbc, {"total": total, "wiring": wiring, "negative": negative, "behavioral": behavioural, "structural": structural}
     
 
     def _fetch_readme(self, repo, doc_facts: Dict) -> str:
