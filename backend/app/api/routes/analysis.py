@@ -55,7 +55,7 @@ def _run_analysis(
     from app.services.github.rate_limiter import AdaptiveRateLimiter
     from app.services.leetcode import LeetCodeCache
     from app.services.codeforces import CodeforcesCache
-    from app.db.mongo import MongoDBSanitizer
+    from app.db.sanitizer import MongoDBSanitizer
  
     db             = app_state.db
     github_client  = app_state.github
