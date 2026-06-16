@@ -67,7 +67,7 @@ class RepoAnalysisPipeline:
         print("\n Step 1: Chunking files...")
         analyzer     = ChunkingAnalyzer(repo_url, self.github_client)
         chunk_result = analyzer.chunk_repo()
-        file_tree    = analyzer.get_file_tree()
+        file_tree    = analyzer.file_tree
  
         # Step 2 — extract facts
         print("\n Step 2: Testing & CI/CD facts...")
@@ -440,7 +440,7 @@ Rules:
                 "contributors":  len(activity_facts.get("top_contributors", [])),
             },
         }
-    
+    @staticmethod
     def _extract_technologies(features: List[Dict]) -> List[str]:
         techs: Set[str] = set()
  

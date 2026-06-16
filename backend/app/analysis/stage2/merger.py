@@ -50,7 +50,7 @@ def merge_repo_analyses(analyses: List[Dict]) -> Dict[str, Any]:
             t = s.get("type", "")
             if t == "wiring":    wiring_signals   += 1
             elif t == "negative":negative_signals += 1
-            elif t == "behavioral": behavioral_signals += 1
+            elif t == "behavioral": behavioural_signals += 1
             elif t == "structural": structural_signals += 1
 
    
@@ -138,7 +138,7 @@ def merge_repo_analyses(analyses: List[Dict]) -> Dict[str, Any]:
         "total_signals":          total_signals,
         "total_wiring_signals":   wiring_signals,
         "total_negative_signals": negative_signals,
-        "total_behavioral_signals": behavioral_signals,
+        "total_behavioral_signals": behavioural_signals,
         "total_structural_signals": structural_signals,
         "testing_summary":        testing_summary,
         "cicd_summary":           cicd_summary,

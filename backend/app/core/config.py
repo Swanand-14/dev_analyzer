@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24h
+    
+    # Dev
+    DEV_MODE: bool = False
 
     # Database
     MONGODB_URI: str = ""

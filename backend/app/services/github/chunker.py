@@ -55,28 +55,50 @@ class ChunkingAnalyzer:
         # Detect default branch
         self.branch = "main"
         try:
-            self.repo.get_branch(self.branch)
+            self.repo.get_branch("main")
         except Exception:
             self.branch = "master"
 
-    # ──────────────────────────────────────────────────────────────
-    # PUBLIC API
-    # ──────────────────────────────────────────────────────────────
+        self._file_tree: Optional[List[str]] = None
+        
+        
 
-    def get_file_tree(self) -> List[str]:
+    def _detect_branch(self) -> str:
         """
-        Returns filtered list of file paths from the repo.
-        Excludes build artifacts, locks, media — see should_include_file().
+        Reads the default branch directly from the repo metadata.
+        No extra API call needed — PyGithub fetches this with the repo object.
         """
-        sha  = self.repo.get_branch(self.branch).commit.sha
-        tree = self.repo.get_git_tree(sha=sha, recursive=True).tree
-
+        try:
+            return self.repo.default_branch
+        except Exception as e:
+            print(f"   ⚠️  Could not read default_branch: {str(e)[:60]}, falling back to 'main'")
+            return "main"
+    @property
+    def file_tree(self) -> List[str]:
+        """
+        Returns the filtered file tree.
+        Fetched once and cached — subsequent calls return the same list.
+        """
+        if self._file_tree is None:
+            self._file_tree = self._fetch_file_tree()
+        return self._file_tree
+ 
+    def _fetch_file_tree(self) -> List[str]:
+        try:
+            sha  = self.repo.get_branch(self.branch).commit.sha
+            tree = self.repo.get_git_tree(sha=sha, recursive=True).tree
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to fetch file tree for branch '{self.branch}' on "
+                f"{self.owner}/{self.repo_name}: {str(e)}"
+            ) from e
+ 
         filtered = [
             item.path
             for item in tree
             if item.type == "blob" and should_include_file(item.path)
         ]
-
+ 
         print(f"   📂 Total repo files: {len(tree)} → After filter: {len(filtered)}")
         return filtered
 
@@ -95,7 +117,7 @@ class ChunkingAnalyzer:
                 owner:             str,
             }
         """
-        files        = self.get_file_tree()
+        files        = self.file_tree
         files_data   = []
         boilerplate  = []
 
