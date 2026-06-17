@@ -98,16 +98,25 @@ def _build_findings(repo_analysis: Dict) -> Tuple[List[Dict], List[Dict]]:
             "finding": "CSRF protection wired into request flow",
             "weight":  "medium",
         })
+        _WEIGHT_BY_TYPE = {"wiring": "high", "behavioral": "medium", "structural": "low"}
  
     # ── Negatives from signals ─────────────────────────────────────────────
     for cap, signals in sigs.items():
         for sig in signals:
-            if sig.get("type") == "negative":
+            sig_type = sig.get("type")
+            if sig_type == "negative":
                 negative_findings.append({
                     "area":     cap.replace("_", " ").title(),
                     "finding":  sig.get("evidence", sig.get("action", "Unknown gap")),
                     "file":     sig.get("file"),
                     "severity": classify_severity(sig.get("action", "")),
+                })
+            elif sig_type in _WEIGHT_BY_TYPE:
+                positive_findings.append({
+                    "area":    cap.replace("_", " ").title(),
+                    "finding": sig.get("evidence", sig.get("action", "Capability present")),
+                    "weight":  _WEIGHT_BY_TYPE[sig_type],
+                    "signal_type": sig_type,
                 })
  
     # ── Summary-level negatives ────────────────────────────────────────────
