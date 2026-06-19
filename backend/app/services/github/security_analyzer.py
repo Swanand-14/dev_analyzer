@@ -59,6 +59,23 @@ class SecurityAnalyzer:
     ]
 
     @staticmethod
+    def _is_middleware_actually_wired(content: str, middleware_keywords: List[str]) -> bool:
+        """
+        Returns True only if one of the matched keywords (e.g. 'verifytoken')
+        appears as an ARGUMENT inside an app.use()/router.use()/app.all() call —
+        not just present anywhere in the file alongside an unrelated .use().
+        """
+        use_call_pattern = re.compile(
+            r"(?:app|router|server)\.(?:use|all)\s*\(([^)]*)\)",
+            re.IGNORECASE,
+        )
+        for match in use_call_pattern.finditer(content):
+            call_args = match.group(1).lower()
+            if any(kw.lower() in call_args for kw in middleware_keywords):
+                return True
+        return False
+
+    @staticmethod
     def analyze_security(repo, file_tree: List[str]) -> Dict:
         findings = {
             "libraries_detected": {
@@ -191,7 +208,10 @@ class SecurityAnalyzer:
                     ss.append({"capability":"api","type":"behavioral","action":"input_validation_applied","evidence":"Schema/validator usage detected in request handling","file":file_path})
 
                 if not pd["auth_middleware_present"] and any(kw in content_lower for kw in ["authmiddleware","requireauth","isauthenticated","verifytoken","protect","authenticate"]):
-                    if any(kw in content for kw in ["app.use","router.use","use("]):
+                    if SecurityAnalyzer._is_middleware_actually_wired(
+                        content,
+                        ["authmiddleware","requireauth","isauthenticated","verifytoken","protect","authenticate"],
+                    ):
                         pd["auth_middleware_present"] = True
                         ss.append({"capability":"authentication","type":"wiring","action":"auth_middleware_applied_to_route","evidence":"Auth middleware wired into route handler","file":file_path})
 

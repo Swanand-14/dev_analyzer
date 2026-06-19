@@ -30,6 +30,7 @@ RADAR_AXES = {
 TLDR_FIELDS = {
     "project_type", "one_liner", "stack_summary", "quick_signals",
 }
+_WEIGHT_BY_TYPE = {"wiring": "high", "behavioral": "medium", "structural": "low"}
 
 
 def _build_findings(repo_analysis: Dict) -> Tuple[List[Dict], List[Dict]]:
@@ -75,6 +76,13 @@ def _build_findings(repo_analysis: Dict) -> Tuple[List[Dict], List[Dict]]:
                        + (f" — runs: {', '.join(ci_steps)}" if ci_steps else ""),
             "weight":  "medium",
         })
+    else:
+        negative_findings.append({
+            "area": "CI/CD", "finding": "No CI/CD pipeline detected in repository",
+            "file": None, "severity": "medium",
+        })
+
+
  
     if testing.get("has_tests"):
         ratio = testing.get("test_to_code_ratio", 0)
@@ -98,7 +106,7 @@ def _build_findings(repo_analysis: Dict) -> Tuple[List[Dict], List[Dict]]:
             "finding": "CSRF protection wired into request flow",
             "weight":  "medium",
         })
-        _WEIGHT_BY_TYPE = {"wiring": "high", "behavioral": "medium", "structural": "low"}
+        
  
     # ── Negatives from signals ─────────────────────────────────────────────
     for cap, signals in sigs.items():
@@ -174,6 +182,11 @@ def _normalize_input(merged_repo_analysis: Dict) -> Dict:
         {"area": p["area"], "finding": p["finding"][:60]}
         for p in positive_findings[:4]
     ]
+
+    capabilities_detected = list(signals_by_cap.keys())
+    if not cicd.get("has_cicd") and "ci_cd" in signal_counts_by_cap:
+        signal_counts_by_cap.pop("ci_cd", None)
+        capabilities_detected = [c for c in capabilities_detected if c != "ci_cd"]
  
     return {
         "scale": {
@@ -223,7 +236,7 @@ def _normalize_input(merged_repo_analysis: Dict) -> Dict:
             "has_license":     docs.get("has_license",          False),
             "readme_sections": docs.get("readme_sections",      []),
         },
-        "capabilities_detected": list(signals_by_cap.keys()),
+        "capabilities_detected": capabilities_detected,
         "meta": {
             "repos_analyzed":  merged_repo_analysis.get("total_repos_analyzed",    0),
             "total_files":     merged_repo_analysis.get("total_files",             0),
@@ -269,7 +282,7 @@ Compute four factual ratios 0–10:
 ━━━ SECURITY POSTURE FIELDS ━━━
 Each field is exactly one of: "pass" | "fail" | "partial"
 - input_validation:  "pass" if input_validation true, "partial" if validation_libraries exist, "fail" otherwise
-- auth_middleware:   "pass" if auth_middleware true, "partial" if auth_libraries exist but not wired, "fail" otherwise
+- auth_middleware:   "pass" if auth_middleware true, "fail" if auth_libraries exist but not wired, "fail" if auth_middleware false and no libraries
 - rate_limiting:     "pass" if rate_limiting_wired true, "partial" if rate_limiting detected but not wired, "fail" otherwise
 - xss_protection:    "pass" if sanitization_libraries present, "fail" if xss signal exists, "partial" otherwise
 - secret_management: "fail" if hardcoded_secret signal exists, "pass" if env_example and no hardcoded secrets, "partial" otherwise
@@ -286,6 +299,21 @@ Include test_to_code_ratio as a float.
 Stages: "Push trigger", "Install", "Lint", "Test", "Build", "Deploy"
 Each: { "step": string, "status": "pass" | "fail" | "skipped" }
 Include extra_features[] for bonus CI features detected.
+
+━━━ CONSISTENCY CONSTRAINTS — CRITICAL ━━━
+- signal_depth.wired and security_posture.auth_middleware MUST agree for the
+  authentication feature. If security_posture.auth_middleware is "fail",
+  signal_depth's authentication entry MUST have wired: false. They describe
+  the same fact and cannot contradict each other.
+- If a capability has a negative_finding explicitly stating it is absent
+  (e.g. "No CI/CD pipeline detected"), you MUST NOT mark that capability as
+  present anywhere else in the output. capability_radar score for that axis
+  must be 0–2, capability_breakdown.status MUST be "missing", present[] MUST
+  be empty, and tldr/project_summary MUST NOT claim that capability exists.
+- NEVER infer a capability's presence from an unrelated technology name
+  (e.g. seeing "Express" in stack_summary does NOT imply CI/CD, testing, or
+  any other capability — only signals and findings for that specific
+  capability are evidence for it).
  
 ━━━ INTERVIEW RISK CARDS ━━━
 - Pull from BOTH positive_findings and negative_findings in input
