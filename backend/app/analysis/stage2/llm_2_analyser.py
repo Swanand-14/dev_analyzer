@@ -291,9 +291,15 @@ Each field is exactly one of: "pass" | "fail" | "partial"
 - password_hashing:  "pass" if bcrypt or argon2 in auth_libraries, "fail" otherwise
  
 ━━━ TESTING MATURITY FIELDS ━━━
-Boolean fields derived from testing facts:
-- happy_path, edge_cases, auth_failure_tests, error_case_tests, mocks, integration_tests, async_tests
+Boolean fields derived directly from testing facts — only what is actually measured:
+- happy_path:        true if has_tests is true
+- only_happy_path:   true if only_happy_path is true (no error/failure cases detected in tests)
+- mocks:              true if has_mocks is true
+- integration_tests:  true if test_to_code_ratio >= 20 and has_tests is true
+- async_tests:        true if async behavioral signals exist in testing capability
 Include test_to_code_ratio as a float.
+Do NOT invent auth_failure_tests, error_case_tests, or edge_cases — these distinctions
+are not measured by the underlying analyzer and must not be guessed.
  
 ━━━ CI/CD PIPELINE FIELDS ━━━
 Stages: "Push trigger", "Install", "Lint", "Test", "Build", "Deploy"
@@ -374,9 +380,7 @@ Never mention scoring, verdicts, or the developer.
   },
   "testing_maturity_breakdown": {
     "happy_path": boolean,
-    "edge_cases": boolean,
-    "auth_failure_tests": boolean,
-    "error_case_tests": boolean,
+    "only_happy_path": boolean,
     "mocks": boolean,
     "integration_tests": boolean,
     "async_tests": boolean,
@@ -501,8 +505,8 @@ def _validate(dashboard: Dict) -> Tuple[bool, List[str]]:
  
     # testing_maturity_breakdown
     tmb = dashboard.get("testing_maturity_breakdown", {})
-    for f in ("happy_path", "edge_cases", "auth_failure_tests", "error_case_tests",
-              "mocks", "integration_tests", "async_tests", "test_to_code_ratio"):
+    for f in ("happy_path", "only_happy_path", "mocks",
+              "integration_tests", "async_tests", "test_to_code_ratio"):
         if f not in tmb:
             errors.append(f"testing_maturity_breakdown missing: {f}")
  

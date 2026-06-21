@@ -136,6 +136,7 @@ class ChunkingAnalyzer:
 
                 scores  = calculate_feature_score(file_path, content, metadata)
                 feature = max(scores.items(), key=lambda x: x[1])[0] if scores else "business_logic"
+                #rag 
 
                 files_data.append({
                     "file":             file_path,
@@ -181,9 +182,7 @@ class ChunkingAnalyzer:
             "owner":             self.owner,
         }
 
-    # ──────────────────────────────────────────────────────────────
-    # CHUNK BUILDERS  (private)
-    # ──────────────────────────────────────────────────────────────
+    
 
     def _build_boilerplate_summary(self, boilerplate_files: List[Dict]) -> Dict:
         """

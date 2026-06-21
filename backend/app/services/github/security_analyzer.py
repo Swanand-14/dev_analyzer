@@ -61,15 +61,18 @@ class SecurityAnalyzer:
     @staticmethod
     def _is_middleware_actually_wired(content: str, middleware_keywords: List[str]) -> bool:
         """
-        Returns True only if one of the matched keywords (e.g. 'verifytoken')
-        appears as an ARGUMENT inside an app.use()/router.use()/app.all() call —
-        not just present anywhere in the file alongside an unrelated .use().
+        Returns True if one of the matched keywords (e.g. 'verifytoken') appears
+        as an ARGUMENT inside either:
+          1. Global mounting:  app.use(...) / router.use(...) / app.all(...)
+          2. Inline per-route: router.post('/path', verifyToken, handler) —
+             the more common real-world pattern where middleware is passed
+             as a positional argument before the route handler.
         """
-        use_call_pattern = re.compile(
-            r"(?:app|router|server)\.(?:use|all)\s*\(([^)]*)\)",
+        wiring_call_pattern = re.compile(
+            r"(?:app|router|server)\.(?:use|all|get|post|put|delete|patch)\s*\(([^)]*)\)",
             re.IGNORECASE,
         )
-        for match in use_call_pattern.finditer(content):
+        for match in wiring_call_pattern.finditer(content):
             call_args = match.group(1).lower()
             if any(kw.lower() in call_args for kw in middleware_keywords):
                 return True
