@@ -67,6 +67,7 @@ ALLOWED_CAPABILITIES: Set[str] = {
     "testing",
     "api",
     "configuration",
+    "validation",
 }
 
 # Only these signal types are valid
@@ -118,6 +119,7 @@ FEATURE_TO_CAPABILITY: Dict[str, str] = {
     "business_logic":   "configuration",
     "custom_components":"configuration",
     "ui_library":       "configuration",
+    "validation":        "validation",
 }
 
 # Rules for classifying a file into a feature group.
@@ -182,6 +184,13 @@ FEATURE_PATTERNS: Dict[str, Dict] = {
         "keywords":  ["radix", "shadcn", "lucide"],
         "priority":  1,
     },
+     "validation": {
+    "paths":     ["/validators/", "/validation/", "/middleware/", "/schemas/", "/rules/"],
+    "imports":   ["joi", "zod", "yup", "express-validator", "class-validator", "validator"],
+    "functions": ["validate", "sanitize", "parse", "check", "schema"],
+    "keywords":  ["validate", "sanitize", "schema", "required", "minlength", "maxlength", "regex", "pattern", "isvalid"],
+    "priority":  9,
+}
 }
 
 # ==========================================

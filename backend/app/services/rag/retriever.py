@@ -13,7 +13,7 @@ _FEATURE_KEYWORDS: Dict[str, List[str]] = {
         "database", "db", "query", "schema", "model", "mongodb",
         "mongoose", "prisma", "sql", "collection", "store",
     ],
-    "api": [
+    "api_routes": [
         "route", "endpoint", "api", "request", "response",
         "rest", "handler", "controller", "express",
     ],
@@ -29,7 +29,11 @@ _FEATURE_KEYWORDS: Dict[str, List[str]] = {
         "config", "env", "environment", "setup", "settings",
         "dotenv", "variable",
     ],
-}
+    "validation": [
+    "validate", "validation", "sanitize", "schema", "joi",
+    "zod", "yup", "input", "required", "rules",
+],
+   }
  
 # Queries that imply holistic reasoning — Mode B
 _HOLISTIC_PATTERNS = [
@@ -43,7 +47,7 @@ _HOLISTIC_PATTERNS = [
     r"project structure",
     r"how (is|does) .*(work|structured|organized)",
 ]
- 
+LOW_CONFIDENCE_THRESHOLD = 0.30
 RetrievalMode = Literal["targeted", "holistic", "auto"]
 
 def _detect_mode(query: str) -> RetrievalMode:
@@ -134,14 +138,23 @@ class RAGRetriever:
         # Sort all results by score descending (targeted) or by feature (holistic)
         if mode == "targeted":
             all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        
  
+        final_results = all_results[:top_k * len(repo_urls)]
+        low_confidence = (
+            mode == "targeted"
+            and bool(final_results)
+            and all((c["score"] or 0) < LOW_CONFIDENCE_THRESHOLD for c in final_results)
+        )
+
         return {
             "question":       question,
             "mode":           mode,
             "feature_filter": feature_filter,
-            "results":        all_results[:top_k * len(repo_urls)],
+            "low_confidence": low_confidence,   
+            "results":        final_results,
         }
-    
+     
     def _targeted_search(
         self,
         repo_url:       str,
@@ -175,7 +188,11 @@ class RAGRetriever:
                 include          = ["documents", "metadatas", "distances"],
             )
  
-        return self._format_results(results, repo_url, mode="targeted")
+        chunks = self._format_results(results, repo_url, mode="targeted")
+
+        
+
+        return chunks
     
 
     def _holistic_sample(self, repo_url: str, top_k: int) -> List[Dict]:
