@@ -5,7 +5,7 @@ import google.generativeai as genai
  
 from app.services.rag.retriever import RAGRetriever
 
-LOW_CONFIDENCE_THRESHOLD = 0.3   # below this → skip LLM, return raw chunks only
+LOW_CONFIDENCE_THRESHOLD = 0.2   # below this → skip LLM, return raw chunks only
 MAX_CHUNK_CHARS_TO_LLM   = 3000
 
 _SYSTEM_PROMPT = """You are a code analysis assistant for a technical recruiting tool.

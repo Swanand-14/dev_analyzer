@@ -15,7 +15,7 @@ from app.services.rag.qa import RAGQueryEngine
 
 # ──────────────────────────────────────────────────────────────
 TEST_REPO      = "Swanand-14/sample-vuln-repo"
-FORCE_REINGEST = False   # True to re-index, False to reuse existing
+FORCE_REINGEST = True   # True to re-index, False to reuse existing
 
 QUESTIONS = [
     "Where exactly is authentication implemented?",

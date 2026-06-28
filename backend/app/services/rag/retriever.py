@@ -47,7 +47,7 @@ _HOLISTIC_PATTERNS = [
     r"project structure",
     r"how (is|does) .*(work|structured|organized)",
 ]
-LOW_CONFIDENCE_THRESHOLD = 0.30
+LOW_CONFIDENCE_THRESHOLD = 0.20
 RetrievalMode = Literal["targeted", "holistic", "auto"]
 
 def _detect_mode(query: str) -> RetrievalMode:

@@ -184,7 +184,24 @@ class RepoIngestionPipeline:
                 language = _detect_language(file_path)
                 metadata = extract_code_metadata(content, file_path)
                 scores   = calculate_feature_score(file_path, content, metadata)
-                feature  = max(scores.items(), key=lambda x: x[1])[0] if scores else "business_logic"
+                max_score = max(scores.values())
+
+                if max_score == 0:
+
+                    feature = "business_logic"
+
+                else:
+
+                    feature = max(scores.items(), key=lambda x: x[1])[0]
+                print("DEBUG → ", file_path)
+
+                print("SCORES → ", scores)
+
+                print("FEATURE → ", feature)
+
+                print("FUNCTIONS → ", metadata["functions"])
+
+                print("-----------")
                 priority = is_high_priority(file_path)
  
                 logical_chunks = _split_into_logical_chunks(content, language)
