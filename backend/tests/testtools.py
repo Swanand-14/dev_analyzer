@@ -14,10 +14,13 @@ from app.services.rag.tools import TOOL_DECLARATIONS, dispatch_tool_call
 FIXED_ANALYSIS_ID = "50ad758a"
  
 QUESTIONS = [
-    "What tech stack does this developer know?",
-    "What kind of project is this?",
+    
+    
     "What frameworks and libraries are used in this codebase?",
     "Give me a summary of what this project does.",
+    "Does this project show good security awareness?",
+    "Is SQL injection possible here?",
+    "How are passwords stored?",
 ]
 # ──────────────────────────────────────────────────────────────
  
