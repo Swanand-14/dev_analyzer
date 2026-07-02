@@ -1,15 +1,4 @@
 # tests/test_qa_router.py
-#
-# Unified test pipeline — runs ALL question types through ONE router.
-# Tests both DB-tool questions and codebase-search questions in a single pass,
-# letting Gemini decide the path for each.
-#
-# Run: python tests/test_qa_router.py
-#
-# Requires:
-#   1. FIXED_ANALYSIS_ID set below (run /analyze once to get this)
-#   2. RAG already ingested for the test repo (run test_rag.py once with
-#      FORCE_REINGEST=True if you haven't indexed yet)
 
 import sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,20 +16,13 @@ FIXED_ANALYSIS_ID = "50ad758a"
 TEST_REPO_URLS    = ["Swanand-14/sample-vuln-repo"]
 
 QUESTIONS = [
-    # ── Expect: DB tool — extract_technologies ──────────────────
-    "What tech stack does this developer know?",
-
-    # ── Expect: DB tool — get_repo_summary ──────────────────────
-    "What kind of project is this?",
-
-    # ── Expect: DB tool — security_scan ─────────────────────────
-    
-    "How are passwords stored?",
-
-    # ── Expect: search_codebase (RAG) ───────────────────────────
-    "Where exactly is authentication implemented?",
-    "How is JWT token verification done in the code?",
-    "Show me where the database connection is configured.",
+    # "What tech stack does this developer know?",
+    # "What kind of project is this?",
+    # "How are passwords stored?",
+    # "Where exactly is authentication implemented?",
+    # "How is JWT token verification done in the code?",
+    # "Show me where the database connection is configured.",
+    "What backend technologies does this developer know, and where is authentication actually used in the code?",
 ]
 # ──────────────────────────────────────────────────────────────
 
@@ -51,16 +33,18 @@ def print_section(title: str) -> None:
 
 def print_result(result: dict) -> None:
     print(f"\n❓ {result['question']}")
-    print(f"   🔧 tool_used: {result['tool_used']}")
 
-    if result["tool_args"]:
-        print(f"   📥 args:      {json.dumps(result['tool_args'], default=str)}")
-
-    if result["tool_result"]:
-        preview = json.dumps(result["tool_result"], default=str)
-        if len(preview) > 300:
-            preview = preview[:300] + "... (truncated)"
-        print(f"   📤 raw result: {preview}")
+    tools = result.get("tools_called", [])
+    if tools:
+        for t in tools:
+            print(f"   🔧 tool:   {t['name']}")
+            print(f"   📥 args:   {json.dumps(t['args'], default=str)}")
+            preview = json.dumps(t['result'], default=str)
+            if len(preview) > 300:
+                preview = preview[:300] + "..."
+            print(f"   📤 result: {preview}")
+    else:
+        print(f"   🔧 tool:   none (direct answer)")
 
     print(f"\n   💬 answer:")
     for line in result["answer"].splitlines():
@@ -69,10 +53,6 @@ def print_result(result: dict) -> None:
 
 def main():
     settings = get_settings()
-
-    if FIXED_ANALYSIS_ID == "YOUR_ANALYSIS_ID_HERE":
-        print("❌ Set FIXED_ANALYSIS_ID in test_qa_router.py before running")
-        sys.exit(1)
 
     if not settings.GEMINI_API_KEY:
         print("❌ GEMINI_API_KEY not set in .env")
@@ -86,6 +66,7 @@ def main():
     print_section(f"UNIFIED Q&A ROUTER TEST — analysis_id: {FIXED_ANALYSIS_ID}")
     print(f"  repo_urls: {TEST_REPO_URLS}")
 
+    all_results = []
     tool_usage_count: dict = {}
 
     for question in QUESTIONS:
@@ -94,12 +75,19 @@ def main():
             analysis_id = FIXED_ANALYSIS_ID,
             repo_urls   = TEST_REPO_URLS,
         )
+        all_results.append(result)
         print_result(result)
 
-        tool = result["tool_used"] or "direct_answer"
-        tool_usage_count[tool] = tool_usage_count.get(tool, 0) + 1
-
     print_section("ROUTING SUMMARY")
+    for result in all_results:
+        tools = result.get("tools_called", [])
+        if tools:
+            for t in tools:
+                name = t["name"]
+                tool_usage_count[name] = tool_usage_count.get(name, 0) + 1
+        else:
+            tool_usage_count["direct_answer"] = tool_usage_count.get("direct_answer", 0) + 1
+
     for tool, count in tool_usage_count.items():
         print(f"  {tool}: {count} question(s)")
 

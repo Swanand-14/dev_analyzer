@@ -6,6 +6,9 @@ import google.generativeai as genai
 from app.services.rag.tools import TOOL_DECLARATIONS, dispatch_tool_call
 from app.services.rag.qa import RAGQueryEngine
 
+# Safety cap — prevents infinite loops if model keeps calling tools
+MAX_TOOL_ROUNDS = 5
+
 _SEARCH_CODEBASE_TOOL = {
     "name": "search_codebase",
     "description": (
@@ -73,120 +76,133 @@ class QARouter:
             f"{question}"
         )
  
-        # ── Step 1: Let Gemini pick a tool (or answer directly) ───────
-        response = self._model.generate_content(
-            prompt,
-            tools=[{"function_declarations": ALL_TOOLS}],
-        )
+        # Conversation history — grows as tools are called
+        messages = [
+            {"role": "user", "parts": [{"text": prompt}]}
+        ]
+
+        tools_called: List[Dict] = []
+        rounds = 0
+
+        while True:
+            rounds += 1
+            if rounds > MAX_TOOL_ROUNDS:
+                return {
+                    "question":    question,
+                    "tools_called":tools_called,
+                    "answer":      f"(Stopped after {MAX_TOOL_ROUNDS} tool rounds without a final answer.)",
+                }
  
-        part = response.candidates[0].content.parts[0]
+            # Ask model 
+            response = self._model.generate_content(
+                messages,
+                tools=[{"function_declarations": ALL_TOOLS}],
+            )
  
-        # No tool call — Gemini answered directly (rare, but handle it)
-        if not hasattr(part, "function_call") or not part.function_call or not part.function_call.name:
-            return {
-                "question":    question,
-                "tool_used":   None,
-                "tool_args":   None,
-                "tool_result": None,
-                "answer":      response.text.strip(),
-            }
+            # Check what the model returned
+            parts = response.candidates[0].content.parts
  
-        fn_name = part.function_call.name
-        fn_args = dict(part.function_call.args)
+            # Collect text parts if any
+            text_parts = [p.text for p in parts if hasattr(p, "text") and p.text]
+ 
+            # Collect function calls if any
+            fn_calls = [
+                p.function_call for p in parts
+                if hasattr(p, "function_call") and p.function_call and p.function_call.name
+            ]
+ 
+            # Model returned text → done 
+            if text_parts and not fn_calls:
+                return {
+                    "question":    question,
+                    "tools_called":tools_called,
+                    "answer":      "".join(text_parts).strip(),
+                }
+ 
+            #  No function calls and no text → something went wrong 
+            if not fn_calls:
+                return {
+                    "question":    question,
+                    "tools_called":tools_called,
+                    "answer":      "(Model returned no text and no tool call.)",
+                }
+ 
+            # Execute all function calls in this round 
+            # Add model's response to conversation history
+            messages.append({
+                "role":  "model",
+                "parts": [{"function_call": {"name": fc.name, "args": dict(fc.args)}} for fc in fn_calls],
+            })
+ 
+            # Execute each tool and collect results
+            fn_responses = []
+            for fc in fn_calls:
+                fn_name = fc.name
+                fn_args = dict(fc.args)
+                fn_args.setdefault("analysis_id", analysis_id)
+ 
+                tool_result = self._execute_tool(fn_name, fn_args, repo_urls)
+ 
+                tools_called.append({
+                    "name":   fn_name,
+                    "args":   fn_args,
+                    "result": tool_result,
+                })
+ 
+                fn_responses.append({
+                    "function_response": {
+                        "name":     fn_name,
+                        "response": tool_result,
+                    }
+                })
+ 
+            # Add all tool results to conversation history
+            messages.append({
+                "role":  "user",
+                "parts": fn_responses,
+            })
+ 
+            # Loop — model will now see tool results and either
+            # call more tools or give a final text answer
+
+    def _execute_tool(
+        self,
+        fn_name:   str,
+        fn_args:   Dict,
+        repo_urls: List[str],
+    ) -> Dict:
+        """Dispatches to the correct tool implementation."""
+ 
+        # DB tools
         if fn_name in {"extract_technologies", "get_repo_summary", "security_scan"}:
-            # DB tools need analysis_id — inject if Gemini omitted it
-            fn_args.setdefault("analysis_id", analysis_id)
+            return dispatch_tool_call(self.db, fn_name, fn_args)
  
-            tool_result = dispatch_tool_call(self.db, fn_name, fn_args)
- 
-            final = self._model.generate_content([
-                {"role": "user",  "parts": [{"text": prompt}]},
-                {"role": "model", "parts": [{"function_call": {"name": fn_name, "args": fn_args}}]},
-                {"role": "user",  "parts": [{"function_response": {"name": fn_name, "response": tool_result}}]},
-            ])
-            answer_text = self._safe_extract_text(final, fallback=tool_result)
- 
-            return {
-                "question":    question,
-                "tool_used":   fn_name,
-                "tool_args":   fn_args,
-                "tool_result": tool_result,
-                "answer":      answer_text,
-            }
-        
+        # RAG search
         if fn_name == "search_codebase":
-            rag_question = fn_args.get("question", question)
-            rag_result   = self._rag_engine.ask(
-                question  = rag_question,
+            question   = fn_args.get("question", "")
+            rag_result = self._rag_engine.ask(
+                question  = question,
                 repo_urls = repo_urls,
                 top_k     = 4,
             )
  
-            # RAGQueryEngine already does its own LLM extraction internally —
-            # its "answer" field (core_snippet/what_exists/what_missing) IS
-            # the grounded result. We pass that back through one more Gemini
-            # call to phrase it naturally for the recruiter, or use it directly
-            # if low_confidence.
             if rag_result["low_confidence"] or not rag_result.get("answer"):
                 return {
-                    "question":    question,
-                    "tool_used":   "search_codebase",
-                    "tool_args":   {"question": rag_question},
-                    "tool_result": rag_result,
-                    "answer":      (
-                        "I couldn't find sufficiently relevant code for this question "
-                        "in the indexed repository."
-                    ),
+                    "found":   False,
+                    "message": "No sufficiently relevant code found for this question.",
                 }
  
             ans = rag_result["answer"]
-            composed_answer = (
-                f"{ans['what_exists']}\n\n"
-                f"{ans['what_missing']}".strip()
-            )
-            if ans.get("located_in"):
-                composed_answer += f"\n\n(Found in: {ans['located_in']})"
- 
             return {
-                "question":    question,
-                "tool_used":   "search_codebase",
-                "tool_args":   {"question": rag_question},
-                "tool_result": rag_result,
-                "answer":      composed_answer,
+                "found":        True,
+                "located_in":   ans.get("located_in", ""),
+                "core_snippet": ans.get("core_snippet", ""),
+                "what_exists":  ans.get("what_exists", ""),
+                "what_missing": ans.get("what_missing", ""),
             }
-        return {
-            "question":    question,
-            "tool_used":   fn_name,
-            "tool_args":   fn_args,
-            "tool_result": {"error": f"Unhandled tool: {fn_name}"},
-            "answer":      "Something went wrong routing this question.",
-        }
+        return {"error": f"Unknown tool: {fn_name}"}
     
-    @staticmethod
-    def _safe_extract_text(response, fallback: Optional[Dict] = None) -> str:
-        """
-        Safely extracts text from a Gemini response.
- 
-        Gemini sometimes returns ANOTHER function_call instead of text
-        (e.g. if it decides it needs more info). response.text crashes
-        in that case. This checks for an actual text part first, and
-        falls back to a plain-text rendering of the tool result if
-        Gemini didn't produce text.
-        """
-        try:
-            parts = response.candidates[0].content.parts
-            text_parts = [p.text for p in parts if hasattr(p, "text") and p.text]
-            if text_parts:
-                return "".join(text_parts).strip()
-        except (IndexError, AttributeError):
-            pass
- 
-        # No text part — Gemini likely tried to chain another tool call.
-        # Fall back to summarizing the tool result directly so the
-        # caller still gets something useful instead of a crash.
-        if fallback:
-            return f"(Model did not return a text answer — raw data: {json.dumps(fallback, default=str)[:500]})"
-        return "(No answer returned by the model.)"
+    
         
 
 
